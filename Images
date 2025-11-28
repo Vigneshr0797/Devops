@@ -1,0 +1,21 @@
+# Kubernetes v1.34
+registry.k8s.io/kube-apiserver:v1.34.0
+registry.k8s.io/kube-controller-manager:v1.34.0
+registry.k8s.io/kube-scheduler:v1.34.0
+registry.k8s.io/kube-proxy:v1.34.0
+registry.k8s.io/pause:3.10.1
+registry.k8s.io/etcd:3.6.4-0
+registry.k8s.io/coredns/coredns:v1.12.3
+
+# Monitoring Stack
+quay.io/prometheus/prometheus:v2.54.0
+quay.io/prometheus/alertmanager:v0.27.0
+quay.io/prometheus/pushgateway:v1.11.0
+quay.io/prometheus-operator/prometheus-operator:v0.75.0
+docker.io/grafana/grafana:11.1.0
+quay.io/prometheus/node-exporter:v1.8.1
+
+# Argo CD
+quay.io/argoproj/argocd:v2.11.0
+ghcr.io/dexidp/dex:v2.39.1
+docker.io/library/redis:7.2-alpine
