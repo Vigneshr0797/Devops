@@ -1,0 +1,113 @@
+[root@EQVLWSO2APSIT15 pv-pvc]# kubectl get nodes
+NAME              STATUS   ROLES           AGE    VERSION
+eqvlws02apsit13   Ready    <none>          71d    v1.29.15
+eqvlwso2apsit15   Ready    control-plane   263d   v1.29.14
+[root@EQVLWSO2APSIT15 pv-pvc]# kubectl describe node eqvlws02apsit13
+Name:               eqvlws02apsit13
+Roles:              <none>
+Labels:             beta.kubernetes.io/arch=amd64
+                    beta.kubernetes.io/os=linux
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=eqvlws02apsit13
+                    kubernetes.io/os=linux
+Annotations:        kubeadm.alpha.kubernetes.io/cri-socket: unix:///var/run/containerd/containerd.sock
+                    node.alpha.kubernetes.io/ttl: 0
+                    projectcalico.org/IPv4Address: 10.57.12.118/24
+                    projectcalico.org/IPv4IPIPTunnelAddr: 10.57.17.0
+                    volumes.kubernetes.io/controller-managed-attach-detach: true
+CreationTimestamp:  Thu, 18 Sep 2025 02:22:08 +0530
+Taints:             <none>
+Unschedulable:      false
+Lease:
+  HolderIdentity:  eqvlws02apsit13
+  AcquireTime:     <unset>
+  RenewTime:       Fri, 28 Nov 2025 08:19:51 +0530
+Conditions:
+  Type                 Status  LastHeartbeatTime                 LastTransitionTime                Reason                       Message
+  ----                 ------  -----------------                 ------------------                ------                       -------
+  NetworkUnavailable   False   Thu, 27 Nov 2025 23:16:21 +0530   Thu, 27 Nov 2025 23:16:21 +0530   CalicoIsUp                   Calico is running on this node
+  MemoryPressure       False   Fri, 28 Nov 2025 08:17:48 +0530   Thu, 27 Nov 2025 21:27:12 +0530   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure         False   Fri, 28 Nov 2025 08:17:48 +0530   Thu, 27 Nov 2025 21:27:12 +0530   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure          False   Fri, 28 Nov 2025 08:17:48 +0530   Thu, 27 Nov 2025 21:27:12 +0530   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready                True    Fri, 28 Nov 2025 08:17:48 +0530   Thu, 27 Nov 2025 21:27:12 +0530   KubeletReady                 kubelet is posting ready status
+Addresses:
+  InternalIP:  10.57.12.118
+  Hostname:    eqvlws02apsit13
+Capacity:
+  cpu:                4
+  ephemeral-storage:  81856Mi
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             15878740Ki
+  pods:               110
+Allocatable:
+  cpu:                4
+  ephemeral-storage:  77249013223
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             15776340Ki
+  pods:               110
+System Info:
+  Machine ID:                 fe81e954866144f181f4eef820013c28
+  System UUID:                2e681e42-f042-b532-123a-08c0ec9e382b
+  Boot ID:                    9d75ca94-8a79-41f0-b59f-dac5aecb2139
+  Kernel Version:             5.15.0-314.193.5.4.el9uek.x86_64
+  OS Image:                   Oracle Linux Server 9.6
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  containerd://1.7.27
+  Kubelet Version:            v1.29.15
+  Kube-Proxy Version:         v1.29.15
+PodCIDR:                      10.57.17.0/24
+PodCIDRs:                     10.57.17.0/24
+Non-terminated Pods:          (11 in total)
+  Namespace                   Name                                                 CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  ---------                   ----                                                 ------------  ----------  ---------------  -------------  ---
+  argocd                      argocd-application-controller-0                      0 (0%)        0 (0%)      0 (0%)           0 (0%)         10h
+  argocd                      argocd-applicationset-controller-64c985fcdc-5884j    0 (0%)        0 (0%)      0 (0%)           0 (0%)         10h
+  argocd                      argocd-dex-server-7d669fd465-zc8mp                   0 (0%)        0 (0%)      0 (0%)           0 (0%)         10h
+  argocd                      argocd-notifications-controller-77c87c6756-4b4nf     0 (0%)        0 (0%)      0 (0%)           0 (0%)         10h
+  argocd                      argocd-redis-7d94d4f5f7-kssgc                        0 (0%)        0 (0%)      0 (0%)           0 (0%)         10h
+  argocd                      argocd-repo-server-54447dbd48-v7t5s                  0 (0%)        0 (0%)      0 (0%)           0 (0%)         9h
+  argocd                      argocd-server-67bd6466d5-5pl7g                       0 (0%)        0 (0%)      0 (0%)           0 (0%)         10h
+  kube-system                 calico-node-wbxbj                                    250m (6%)     0 (0%)      0 (0%)           0 (0%)         9h
+  kube-system                 kube-proxy-2cjwc                                     0 (0%)        0 (0%)      0 (0%)           0 (0%)         71d
+  monitoring                  node-exporter-gl54d                                  0 (0%)        0 (0%)      0 (0%)           0 (0%)         65d
+  twistlock                   twistlock-defender-ds-bqz2f                          256m (6%)     900m (22%)  512Mi (3%)       512Mi (3%)     9d
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests    Limits
+  --------           --------    ------
+  cpu                506m (12%)  900m (22%)
+  memory             512Mi (3%)  512Mi (3%)
+  ephemeral-storage  0 (0%)      0 (0%)
+  hugepages-1Gi      0 (0%)      0 (0%)
+  hugepages-2Mi      0 (0%)      0 (0%)
+Events:              <none>
+
+
+Master eqvlwso2apsit15 kubelet logs
+
+[root@EQVLWSO2APSIT15 pv-pvc]# journalctl -u kubelet -f
+Nov 27 23:16:08 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:08.562216   50868 reconciler_common.go:305] "Volume detached for volume \"bpffs\" (UniqueName: \"kubernetes.io/host-path/edc461ea-afee-420d-aaad-db16001ee129-bpffs\") on node \"eqvlwso2apsit15\" DevicePath \"\""
+Nov 27 23:16:08 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:08.562226   50868 reconciler_common.go:305] "Volume detached for volume \"cni-log-dir\" (UniqueName: \"kubernetes.io/host-path/edc461ea-afee-420d-aaad-db16001ee129-cni-log-dir\") on node \"eqvlwso2apsit15\" DevicePath \"\""
+Nov 27 23:16:08 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:08.562235   50868 reconciler_common.go:305] "Volume detached for volume \"var-run-calico\" (UniqueName: \"kubernetes.io/host-path/edc461ea-afee-420d-aaad-db16001ee129-var-run-calico\") on node \"eqvlwso2apsit15\" DevicePath \"\""
+Nov 27 23:16:08 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:08.562243   50868 reconciler_common.go:305] "Volume detached for volume \"host-local-net-dir\" (UniqueName: \"kubernetes.io/host-path/edc461ea-afee-420d-aaad-db16001ee129-host-local-net-dir\") on node \"eqvlwso2apsit15\" DevicePath \"\""
+Nov 27 23:16:08 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:08.562252   50868 reconciler_common.go:305] "Volume detached for volume \"lib-modules\" (UniqueName: \"kubernetes.io/host-path/edc461ea-afee-420d-aaad-db16001ee129-lib-modules\") on node \"eqvlwso2apsit15\" DevicePath \"\""
+Nov 27 23:16:08 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:08.562259   50868 reconciler_common.go:305] "Volume detached for volume \"policysync\" (UniqueName: \"kubernetes.io/host-path/edc461ea-afee-420d-aaad-db16001ee129-policysync\") on node \"eqvlwso2apsit15\" DevicePath \"\""
+Nov 27 23:16:08 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:08.562266   50868 reconciler_common.go:305] "Volume detached for volume \"sys-fs\" (UniqueName: \"kubernetes.io/host-path/edc461ea-afee-420d-aaad-db16001ee129-sys-fs\") on node \"eqvlwso2apsit15\" DevicePath \"\""
+Nov 27 23:16:08 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:08.562273   50868 reconciler_common.go:305] "Volume detached for volume \"kube-api-access-6cqkm\" (UniqueName: \"kubernetes.io/projected/edc461ea-afee-420d-aaad-db16001ee129-kube-api-access-6cqkm\") on node \"eqvlwso2apsit15\" DevicePath \"\""
+Nov 27 23:16:09 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:09.572183   50868 kubelet_volumes.go:163] "Cleaned up orphaned pod volumes dir" podUID="edc461ea-afee-420d-aaad-db16001ee129" path="/var/lib/kubelet/pods/edc461ea-afee-420d-aaad-db16001ee129/volumes"
+Nov 27 23:16:11 EQVLWSO2APSIT15 kubelet[50868]: I1127 23:16:11.520359   50868 pod_startup_latency_tracker.go:102] "Observed pod startup duration" pod="kube-system/calico-node-tsbmf" podStartSLOduration=2.561278538 podStartE2EDuration="4.520317468s" podCreationTimestamp="2025-11-27 23:16:07 +0530 IST" firstStartedPulling="2025-11-27 23:16:07.652845987 +0530 IST m=+7444.187643977" lastFinishedPulling="2025-11-27 23:16:09.611884913 +0530 IST m=+7446.146682907" observedRunningTime="2025-11-27 23:16:11.520162759 +0530 IST m=+7448.054960767" watchObservedRunningTime="2025-11-27 23:16:11.520317468 +0530 IST m=+7448.055115492"
+
+worker eqvlws02apsit13 kubelet logs 
+[appuser@EQVLWS02APSIT13 ~]$ sudo su -
+Last login: Thu Nov 27 18:43:26 IST 2025 on pts/0
+[root@EQVLWS02APSIT13 ~]# journalctl -u kubelet -f
+Nov 28 08:21:45 EQVLWS02APSIT13 kubelet[48156]: E1128 08:21:45.502648   48156 file_linux.go:61] "Unable to read config path" err="path does not exist, ignoring" path="/etc/kubernetes/manifests"
+Nov 28 08:21:46 EQVLWS02APSIT13 kubelet[48156]: E1128 08:21:46.503368   48156 file_linux.go:61] "Unable to read config path" err="path does not exist, ignoring" path="/etc/kubernetes/manifests"
+Nov 28 08:21:47 EQVLWS02APSIT13 kubelet[48156]: E1128 08:21:47.504112   48156 file_linux.go:61] "Unable to read config path" err="path does not exist, ignoring" path="/etc/kubernetes/manifests"
+Nov 28 08:21:48 EQVLWS02APSIT13 kubelet[48156]: E1128 08:21:48.504959   48156 file_linux.go:61] "Unable to read config path" err="path does not exist, ignoring" path="/etc/kubernetes/manifests"
+Nov 28 08:21:49 EQVLWS02APSIT13 kubelet[48156]: E1128 08:21:49.505774   48156 file_linux.go:61] "Unable to read config path" err="path does not exist, ignoring" path="/etc/kubernetes/manifests"
+Nov 28 08:21:50 EQVLWS02APSIT13 kubelet[48156]: E1128 08:21:50.506626   48156 file_linux.go:61] "Unable to read config path" err="path does not exist, ignoring" path="/etc/kubernetes/manifests"
+Nov 28 08:21:51 EQVLWS02APSIT13 
