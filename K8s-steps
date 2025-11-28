@@ -1,0 +1,443 @@
+Nice — I’ll give you a clear, copy-pasteable, step-by-step playbook to:
+	•	prepare each host (master & workers),
+	•	install/configure containerd so it pulls from your Harbor registry (no internet required at runtime),
+	•	install kubeadm/kubelet/kubectl,
+	•	bootstrap the control plane using images from Harbor, and
+	•	preload or mirror any images (control-plane, Calico, app images) into Harbor and on each node so pods never go to the public internet.
+
+I’ll include exact commands and config snippets you can run on your servers. I assume:
+	•	Harbor registry is reachable at 10.100.23.4:80 (replace with your Harbor IP:port if different).
+	•	You have Harbor credentials (USERNAME / PASSWORD).
+	•	Master advertise IP is 19.02.34.2 (you used this earlier).
+	•	Pod network cidr you want is 192.168.0.0/16 (common for Calico) — change if you use a different range.
+	•	Kubernetes version targeted: v1.28 (adjust if different).
+
+⸻
+
+0) Prep: add /etc/hosts on all servers
+
+Run on every node (you already listed these lines). Edit /etc/hosts and add:
+
+sudo tee -a /etc/hosts > /dev/null <<EOF
+19.02.34.2 EQVLWSO2APPRD01
+19.02.34.5 EQVLWSO2APPRD11
+# add other nodes here...
+EOF
+
+
+⸻
+
+1) Kernel modules & sysctl (run on every node)
+
+# ensure modules load on boot
+sudo tee /etc/modules-load.d/k8s.conf > /dev/null <<EOF
+overlay
+br_netfilter
+EOF
+
+# load now
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+# sysctl params required by Kubernetes
+sudo tee /etc/sysctl.d/k8s.conf > /dev/null <<EOF
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+# apply
+sudo sysctl --system
+
+Verify:
+
+sudo lsmod | grep -E "br_netfilter|overlay"
+sudo sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables net.ipv4.ip_forward
+
+
+⸻
+
+2) Install containerd (all nodes)
+
+These commands follow your example but include the containerd config tweaks needed to use a local registry and systemd cgroup.
+
+# install repo and containerd
+sudo yum -y install yum-utils
+sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+sudo yum install -y containerd.io
+
+# generate default config (recommended)
+sudo mkdir -p /etc/containerd
+sudo containerd config default | sudo tee /etc/containerd/config.toml
+
+Edit /etc/containerd/config.toml and make these key changes:
+	1.	Enable systemd cgroup (important for kubelet/cgroupv1 vs cgroup driver):
+
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+  SystemdCgroup = true
+
+	2.	Configure your Harbor registry as a mirror (so node pulls go to Harbor). Add under the same file (examples — put inside file at appropriate sections):
+
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."10.100.23.4:80"]
+  endpoint = ["http://10.100.23.4:80"]   # use http if Harbor is on :80 / insecure
+
+If your Harbor uses TLS on 443, use https://your.harbor:443 and omit http. If Harbor is self-signed, you’ll need to add CA or mark insecure (see below).
+
+Save and restart containerd:
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now containerd
+sudo systemctl restart containerd
+sudo systemctl status containerd -l
+
+
+⸻
+
+2.a (optional) If Harbor uses plain HTTP or self-signed certs
+
+If Harbor is on http or uses self-signed certs, either:
+
+Option A — allow plain HTTP (insecure but common for private LAN):
+	•	Ensure the endpoint uses http://host:port in config.toml as above.
+
+Option B — add Harbor CA to system trust (preferred for TLS):
+	•	Copy CA to /etc/pki/ca-trust/source/anchors/ and run sudo update-ca-trust.
+
+Note about auth: Containerd itself does not use Docker config ~/.docker/config.json by default for kubeadm pulls. For pulling control-plane images during kubeadm init, either:
+	•	Make your Harbor public in the LAN, or
+	•	Preload the required images on every node (recommended — described below), or
+	•	Use ctr with --user user:pass to authenticate temporarily.
+
+We’ll use the preload & mirror approach so nodes never need internet/auth for kubeadm.
+
+⸻
+
+3) Mirror / push required images to Harbor (on a machine with internet)
+
+You must ensure the images Kubernetes needs (control plane, pause, coredns) plus Calico images and all your app images are available in Harbor with the tags you will use.
+
+A. On a machine that has internet access (can be your laptop or jump host):
+
+Example workflow to mirror an image to Harbor:
+
+# pull official image (example: kube-apiserver)
+docker pull k8s.gcr.io/kube-apiserver:v1.28.0
+
+# tag it for Harbor (use your project e.g. library/k8s)
+docker tag k8s.gcr.io/kube-apiserver:v1.28.0 10.100.23.4:80/library/kube-apiserver:v1.28.0
+
+# push to Harbor
+docker login 10.100.23.4:80
+docker push 10.100.23.4:80/library/kube-apiserver:v1.28.0
+
+You must mirror these image types to Harbor (common list; adapt for your version):
+	•	kube-apiserver:v1.28.0 (and controller-manager, scheduler)
+	•	kube-proxy:v1.28.0
+	•	kube-controller-manager:v1.28.0
+	•	kube-scheduler:v1.28.0
+	•	pause image (k8s.gcr.io/pause:3.10 or version for 1.28)
+	•	coredns image (version in kubeadm config)
+	•	etcd image used by kubeadm
+	•	Calico images (calico/node, calico/cni, calico/kube-controllers, typha if used)
+	•	Any CSI / cloud provider images you will use
+	•	All application images currently in your apps (you said they’re already in Harbor — good)
+
+B. Helpful: create a script to mirror all required images (example skeleton):
+
+#!/bin/bash
+REG=10.100.23.4:80/library
+docker login 10.100.23.4:80 -u $HARBOR_USER -p $HARBOR_PASS
+
+# list of upstream images and tags (fill exact versions)
+images=(
+  "k8s.gcr.io/kube-apiserver:v1.28.0"
+  "k8s.gcr.io/kube-controller-manager:v1.28.0"
+  "k8s.gcr.io/kube-scheduler:v1.28.0"
+  "k8s.gcr.io/kube-proxy:v1.28.0"
+  "k8s.gcr.io/pause:3.10"
+  "k8s.gcr.io/coredns/coredns:1.10.1"
+  "k8s.gcr.io/etcd:3.5.9-0"
+  # calico images (check Calico version you plan to use)
+  "quay.io/projectcalico/node:v3.25.0"
+  "quay.io/projectcalico/cni:v3.25.0"
+  "quay.io/projectcalico/controller:v3.25.0"
+  # add your app images here...
+)
+
+for img in "${images[@]}"; do
+  upstream="$img"
+  name=$(echo "$img" | awk -F/ '{print $NF}')
+  # pull, tag, push
+  docker pull "$upstream"
+  docker tag "$upstream" "$REG/$name"
+  docker push "$REG/$name"
+done
+
+Adjust names/tags so they match what kubeadm/calico expect — OR be prepared to tell kubeadm/calico to use the Harbor repo (we’ll do that below).
+
+⸻
+
+4) Preload images on each node (recommended, avoids auth at boot)
+
+Two options: (A) Pull directly from Harbor on each node (if containerd config allows http & no auth), or (B) docker save -> copy -> ctr images import (works offline).
+
+A. Pull directly on node (if Harbor reachable and containerd registry mirror configured):
+
+# example: pull pause image to containerd
+sudo ctr -n k8s.io image pull 10.100.23.4:80/library/pause:3.10 --user HARBORUSER:HARBORPASS --plain-http
+
+(If Harbor runs HTTP, add --plain-http; if using HTTPS and certs are valid, omit.)
+
+B. Import image tar (offline-safe) — recommended if nodes have no internet/auth):
+
+On machine with internet:
+
+docker pull k8s.gcr.io/pause:3.10
+docker tag k8s.gcr.io/pause:3.10 10.100.23.4:80/library/pause:3.10
+docker save 10.100.23.4:80/library/pause:3.10 -o pause-3.10.tar
+# copy pause-3.10.tar to each node (scp / rsync)
+
+On each target node:
+
+# as root
+sudo ctr -n k8s.io images import /path/to/pause-3.10.tar
+# verify
+sudo ctr -n k8s.io images ls | grep pause
+
+Do this for all control-plane images and Calico images and your app images. Preloading avoids any runtime pulls.
+
+⸻
+
+5) Install kubelet/kubeadm/kubectl (all nodes)
+
+On every node:
+
+# turn off swap & firewall & permissive SELinux (you already showed these)
+sudo swapoff -a
+sudo sed -i '/ swap / s/^/#/' /etc/fstab
+sudo systemctl disable --now firewalld
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+# add k8s repo (v1.28 example)
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.28/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.28/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+EOF
+
+sudo yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+sudo systemctl enable --now kubelet
+
+Verify:
+
+kubeadm version
+kubelet --version
+kubectl version --client
+
+
+⸻
+
+6) Prepare kubeadm config so images are taken from Harbor
+
+We’ll create a kubeadm config file that tells kubeadm to use your Harbor image repository and not pull from registry.k8s.io.
+
+Create /root/kubeadm-config.yaml on master:
+
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "19.02.34.2"
+  bindPort: 6443
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+kubernetesVersion: "v1.28.0"
+imageRepository: "10.100.23.4:80/library"   # <-- use Harbor repo where you pushed k8s images
+networking:
+  podSubnet: "192.168.0.0/16"
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: KubeletConfiguration
+cgroupDriver: systemd
+
+Important: imageRepository must have images you pushed. kubeadm will look for imageRepository/<component>:<tag> — ensure names match.
+
+⸻
+
+7) Initialize master (run only on master)
+
+sudo kubeadm init --config=/root/kubeadm-config.yaml --upload-certs
+
+If the images are already present locally (you preloaded via ctr), kubeadm will not need internet. If not present, kubeadm will attempt to pull — ensure your containerd mirror config points to Harbor or preloaded images exist.
+
+After successful init, as your non-root user:
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Verify:
+
+kubectl get nodes
+kubectl get pods -n kube-system
+
+
+⸻
+
+8) Install Calico using Harbor images
+
+Default kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml will try to pull Calico images from upstream. Instead:
+	1.	Edit the Calico manifest (download it locally), update image references to point to 10.100.23.4:80/library/<calico-image>:<tag> — the same tags you pushed to Harbor.
+	2.	Apply the modified manifest:
+
+kubectl apply -f ./calico-harbor.yaml
+
+Or use kubectl set image on the DaemonSet/Deployment after applying an edited manifest. The key is every Calico image reference must point to your Harbor repo.
+
+⸻
+
+9) Join worker nodes
+
+On master after kubeadm init you’ll get a kubeadm join ... command. On each worker node, run that join command. Example:
+
+sudo kubeadm join 19.02.34.2:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>
+
+If you used the kubeadm init --upload-certs, you might have also a command for joining control plane nodes; follow the output.
+
+After join, confirm on master:
+
+kubectl get nodes
+
+
+⸻
+
+10) Ensure pods pull from Harbor (cluster-wide)
+
+You have 3 methods — use one or combine:
+
+Method A — image names in manifests point to Harbor
+When deploying apps, always use images like 10.100.23.4:80/myproj/myapp:tag. This is simplest.
+
+Method B — default imagePullSecrets for namespace
+If Harbor requires auth, create a docker registry secret and attach it to default service account in each namespace so pods use it automatically:
+
+kubectl create secret docker-registry harbor-regcred \
+  --docker-server=10.100.23.4:80 \
+  --docker-username=HARBORUSER \
+  --docker-password=HARBORPASS \
+  --docker-email=you@domain.local \
+  -n default
+
+# patch default service account in namespace 'default' to use it
+kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "harbor-regcred"}]}' -n default
+
+Do this for each namespace or script it.
+
+Method C — force kubelet/containerd to rewrite repository (advanced)
+You can use admission/webhook to rewrite image names, or configure containerd registry mirrors to map upstream registry.k8s.io to Harbor. Example in config.toml mapping:
+
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]
+  endpoint = ["http://10.100.23.4:80"]
+
+But mirroring names and tags exactly is critical.
+
+⸻
+
+11) Preloading new app images (workflow)
+
+When devs push a new app image to Harbor:
+	1.	Push from build pipeline to Harbor: 10.100.23.4:80/myproj/myapp:v1.2.3.
+	2.	On each node (or via DaemonSet), pull to containerd, or rely on kubelet to pull from Harbor provided credentials are available. If you want zero-pull at runtime, push image tar to nodes and import with ctr -n k8s.io images import.
+
+⸻
+
+12) Troubleshooting pods that CrashLoopBackOff or Image pull errors
+
+Common commands:
+
+# pod details
+kubectl describe pod <pod> -n <ns>
+
+# check pod logs
+kubectl logs <pod> -n <ns> --previous
+
+# check node images (containerd)
+sudo ctr -n k8s.io images ls
+
+# check containerd logs
+sudo journalctl -u containerd -b --no-pager -o cat | tail -n 200
+
+# check kubelet logs
+sudo journalctl -u kubelet -b --no-pager -o cat | tail -n 200
+
+If you see ErrImagePull / ImagePullBackOff:
+	•	confirm image name/tag exists in Harbor,
+	•	confirm node can reach Harbor (curl http://10.100.23.4:80/v2/),
+	•	check if registry requires auth — create imagePullSecrets and attach to service account or deploy manifest with imagePullSecrets,
+	•	if you preloaded with ctr import, ensure the image names match what the pod manifest requests.
+
+⸻
+
+13) Example: Pulling an image from Harbor on a node (with auth & plain-http)
+
+If Harbor uses HTTP and requires auth, from node run:
+
+# temporary pull using ctr with basic auth (not ideal for automation)
+sudo ctr -n k8s.io images pull --user HARBORUSER:HARBORPASS --plain-http 10.100.23.4:80/library/myapp:1.0.0
+
+Better: use the docker login credential and push/import tar images as described.
+
+⸻
+
+14) Verification checklist after cluster is up
+
+On master:
+
+kubectl get nodes --no-headers
+kubectl get pods -A
+kubectl get pods -n kube-system
+kubectl describe daemonset calico-node -n kube-system
+
+Test deploying an app that uses a Harbor image:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-harbor
+spec:
+  containers:
+  - name: nginx
+    image: 10.100.23.4:80/library/nginx:1.23
+  restartPolicy: Never
+
+kubectl apply -f test-pod.yaml and kubectl get pod test-harbor -o wide — pod should run without pulling from internet.
+
+⸻
+
+15) Short summary & useful commands / snippets
+	•	Set SystemdCgroup = true in /etc/containerd/config.toml.
+	•	Configure containerd registry mirror in config.toml to your Harbor endpoint.
+	•	Mirror & push all control-plane & network plugin images to Harbor. Keep names/tags consistent.
+	•	Preload images on nodes via ctr -n k8s.io images import <tar> (offline safe).
+	•	Use imageRepository: "10.100.23.4:80/library" in kubeadm config so kubeadm init pulls from Harbor.
+	•	For private Harbor: create docker-registry secret and add to default serviceaccount (or to namespaces) to allow pods to pull.
+	•	If pods still try to pull from internet, check manifests for image names (they must reference Harbor or you must map upstream repos to Harbor).
+
+⸻
+
+If you want, I can now:
+	•	generate a ready-to-run script for all steps (one script per phase: prep_nodes.sh, install_containerd.sh, mirror_images.sh, init_master.sh, join_worker.sh) tailored to your exact node list and Harbor credentials, or
+	•	produce the exact list of images and the exact docker pull/docker tag/docker push commands for Kubernetes v1.28 + Calico (I will list the exact image names and versions to mirror).
+
+Tell me which of the two you want and provide (if you want automation):
+	•	Harbor host (IP:port) — if different than 10.100.23.4:80
+	•	Harbor user & a placeholder env var name to use (I’ll not save credentials)
+	•	Exact pod-network-cidr if not 192.168.0.0/16
+	•	Kubernetes version if not v1.28.0
+
+If you want me to produce the full scripts now I’ll create them with placeholders (so you can paste credentials) — no waiting needed.
