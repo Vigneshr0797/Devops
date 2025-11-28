@@ -1,0 +1,48 @@
+Jira Summary
+
+Kubernetes Node Patching and Post-Deployment Validation Prior to Backup Execution
+
+⸻
+
+✅ Jira Description
+
+Objective:
+Perform Kubernetes patching on cluster nodes prior to the scheduled backup activity, ensure the environment is stable, and validate all components after the patch deployment.
+
+Scope of Work:
+	1.	Pre-Patch Preparation
+	•	Verified cluster health and node readiness using kubectl get nodes and kubectl get pods -A.
+	•	Checked resource utilization (CPU/Memory/Disk) on all worker and master nodes.
+	•	Ensured backup jobs and running workloads were stable before initiating patching.
+	2.	Patching Activity
+	•	Applied OS and Kubernetes security patches on targeted nodes.
+	•	Drained nodes safely using:
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+
+Completed node patching and rebooted nodes where necessary.
+	•	Brought nodes back into the cluster using:
+kubectl uncordon <node>
+
+3.	Post-Deployment Validation
+	•	Verified node status changed to Ready after patching.
+	•	Ensured all pods rescheduled successfully with no CrashLoopBackOff or Init errors.
+	•	Validated cluster core components (kube-system, CNI, monitoring stack) for stability.
+	•	Checked application namespaces to confirm service availability.
+	•	Reviewed logs for kubelet, container runtime, and application pods.
+	4.	Backup Process Readiness
+	•	Confirmed patching completed without issues.
+	•	Validated that cluster is ready for the backup schedule.
+	•	Ensured all backup jobs/services are in a healthy state.
+
+Outcome:
+All nodes successfully patched, cluster components are healthy, and the Kubernetes environment is verified and ready for the backup process.
+
+Worklog:
+	•	Performed pre-patch health checks on all Kubernetes nodes and verified cluster stability.
+	•	Safely drained nodes and executed OS/Kubernetes patch updates.
+	•	Rebooted nodes (where required) and validated kubelet and runtime startup logs.
+	•	Rejoined nodes back to the cluster and verified Ready state.
+	•	Ensured all workloads rescheduled without errors across all namespaces.
+	•	Checked CNI, DNS, Ingress, and monitoring components for proper functioning.
+	•	Confirmed cluster meets prerequisites for the upcoming backup process.
+	•	Completed post-patch validation and ensured system stability.
