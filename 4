@@ -1,0 +1,123 @@
+✅ YOUR WORKER NODE IS PERFECTLY FINE
+
+From this output:
+
+eqvlws02apsit13   Ready   <none>
+
+No taints
+Ready = True
+Calico = Running
+Kubelet = Healthy
+Containers running normally
+
+👉 So worker node is 100% healthy
+👉 The scheduling issue is NOT because of this node
+
+⸻
+
+🚨 THE REAL PROBLEM IS THIS LINE FROM YOUR EARLIER ERROR
+
+Your Deployment events showed:
+
+0/2 nodes available:  
+1 node had un-tolerated taint {node-role.kubernetes.io/control-plane}  
+1 node had taint node.kubernetes.io/not-ready
+
+NOW we know the truth:
+
+➡ The “NotReady” node was actually the CONTROL-PLANE at that time — NOT your worker!
+
+And based on your latest logs from master:
+
+Volume detached ...
+Cleaned up orphaned pod volumes ...
+Calico restarting ...
+
+Your master node went unhealthy temporarily
+This is why the scheduler showed:
+
+1 node had not-ready taint
+1 node had control-plane taint (NoSchedule)
+
+📌 Worker node was NOT the problem at all.
+📌 Control plane node temporarily NotReady + NoSchedule = 0 nodes available
+
+⸻
+
+🔥 SO WHY IS YOUR POD STILL NOT SCHEDULING?
+
+Your pod includes a PVC:
+
+PersistentVolumeClaim (PVC) — using storage
+
+Persistent storage has node affinity.
+
+Your PV likely has NodeAffinity bound to control-plane node
+
+This means the PV can only attach to master, but master is tainted → so pod cannot schedule.
+
+Let’s confirm.
+
+Run this:
+
+kubectl get pv
+
+Identify your PV → then run:
+
+kubectl describe pv <pv-name>
+
+If you see:
+
+nodeAffinity:
+  required:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: In
+            values:
+            - eqvlwso2apsit15   (control-plane)
+
+Then PVC is locked to master node
+And your master node has:
+
+node-role.kubernetes.io/control-plane:NoSchedule
+
+So the pod can NEVER run on worker.
+
+⸻
+
+✅ FIX OPTIONS
+
+Option 1 — Allow pod to run on master (temporary fix)
+
+Edit Deployment → add tolerations:
+
+tolerations:
+- key: "node-role.kubernetes.io/control-plane"
+  operator: "Exists"
+  effect: "NoSchedule"
+
+Then:
+
+kubectl apply -f deployment.yaml
+
+Your pod will run on master.
+
+⸻
+
+Option 2 — Move PV/PVC to worker node (recommended)
+
+If using hostPath → you must re-create PV pointing to worker.
+
+If using NFS, Ceph, StorageClass → make sure StorageClass supports multi-node provisioning.
+
+⸻
+
+🧵 NEXT STEP — SEND ME THIS
+
+Run both and paste:
+
+kubectl get pvc -n <your-namespace>
+kubectl describe pv <pv-name>
+
+I will tell you exactly why the pod is forced onto the master node.
